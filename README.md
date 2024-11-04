@@ -31,10 +31,4 @@ The **Gesture-Powered Interaction** system has a wide range of potential applica
 4. **Accessibility**: Enhancing accessibility for users with physical disabilities or limited mobility, providing an alternative to traditional input devices.
 5. **Sign Language Interpretation**: Recognizing sign language gestures, enabling seamless communication between deaf/hard-of-hearing individuals and digital systems.
 
-## Getting Started
 
-To get started with the **Gesture-Powered Interaction** system, please refer to the [Installation Guide](./INSTALLATION.md) and [User Manual](./USER_MANUAL.md). These resources will provide you with all the necessary information to set up the system, configure it, and start using the gesture-based controls.
-
-We encourage you to explore the capabilities of this innovative system and provide us with your valuable feedback. Your input will help us improve and refine the **Gesture-Powered Interaction** system to better serve your needs.
-
-If you have any questions or need further assistance, please don't hesitate to reach out to our [support team](mailto:support@gesture-powered-interaction.com).

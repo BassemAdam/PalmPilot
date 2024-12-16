@@ -2,6 +2,8 @@
 
 The **Gesture-Powered Interaction** project introduces a cutting-edge hand gesture recognition system for seamless, touch-free interaction with digital interfaces. Designed for environments where physical contact is impractical or unsafe, this innovative solution leverages **computer vision** and **machine learning** to enhance accessibility, usability, and user experience.
 
+- **Video**: https://www.youtube.com/watch?v=I8AyOxLup-A
+  
 ---
 
 ## 🌟 **Key Features**
@@ -26,7 +28,6 @@ The **Gesture-Powered Interaction** project introduces a cutting-edge hand gestu
 - **Cooldown Periods**: Reduces accidental activation.  
 - **Movement Thresholds**: Ensures deliberate gestures are recognized.  
 - **Consistency Checks**: Increases gesture accuracy and reliability.  
-
 ---
 
 ## 🛠️ **System Capabilities**

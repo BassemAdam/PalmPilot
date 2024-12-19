@@ -35,7 +35,7 @@ def extract_features(binary_mask):
     return np.array(features)
 
 # Example: Predict a gesture
-binary_mask = cv2.imread("image.png", cv2.IMREAD_GRAYSCALE)
+binary_mask = cv2.imread("./932.jpg", cv2.IMREAD_GRAYSCALE)
 if binary_mask is not None:
     # Resize image if necessary (ensure it matches training image size)
     resized_mask = cv2.resize(binary_mask, (128, 128))  # Resize to the expected size if needed

@@ -15,6 +15,18 @@ class AdvancedHandSegmenter:
         self.protection_radius = 100  # Radius of protected region
         self.mask_history = deque(maxlen=10)
     
+    def exclude_face_region(self, frame, mask):
+        # Load pre-trained face detector
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        
+        # Create a mask to exclude the face
+        for (x, y, w, h) in faces:
+            cv2.rectangle(mask, (x, y), (x + w, y + h), 0, -1)  # Mask out face region
+            
+        return mask
+
     def cartoonize_frame(self, frame, mask):
         # K-means clustering with single skin color
         data = frame[mask > 0].reshape((-1,3))
@@ -43,22 +55,6 @@ class AdvancedHandSegmenter:
         
         return result
     
-    def get_hand_center(self, contour):
-        if contour is None:
-            return None
-        M = cv2.moments(contour)
-        if M["m00"] != 0:
-            cx = int(M["m10"] / M["m00"])
-            cy = int(M["m01"] / M["m00"])
-            return (cx, cy)
-        return None
-
-    def create_circle_mask(self, frame_shape, center, radius):
-        mask = np.zeros(frame_shape[:2], dtype=np.uint8)
-        if center is not None:
-            cv2.circle(mask, center, radius, 255, -1)
-        return mask
-
     def create_enhanced_skin_mask(self, frame):
         # Calculate brightness
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -180,7 +176,10 @@ class AdvancedHandSegmenter:
     def segment_hand(self, frame):
         try:
             enhanced_frame = frame.copy()
+          
             skin_mask = self.create_enhanced_skin_mask(enhanced_frame)
+            skin_mask = self.exclude_face_region(enhanced_frame, skin_mask)
+
             optical_flow_mask = self.calculate_optical_flow(enhanced_frame)
             
             fg_mask = self.bg_subtractor.apply(frame)
@@ -216,25 +215,11 @@ class AdvancedHandSegmenter:
                     hand_mask = np.zeros_like(skin_mask)
                     cv2.drawContours(hand_mask, [smoothed_contour], -1, 255, -1)
                     
-                    # Get hand center
-                    self.hand_center = self.get_hand_center(smoothed_contour)
+                    # Create white hand region with feature visualization
+                    result = np.zeros_like(frame)
+                    result[hand_mask > 0] = [255, 255, 255]  # Make hand region white
                     
-                    # Create protected region mask
-                    protection_mask = self.create_circle_mask(frame.shape, self.hand_center, self.protection_radius)
-                    
-                    
-                    # Create result frame with protected region
-                    result = frame.copy()
-                    protection_mask = self.create_circle_mask(frame.shape, self.hand_center, self.protection_radius)
-                    result[protection_mask == 0] = [0, 0, 0]  # Mask everything outside protected region
-                    
-                    # Draw protected region circle
-                    if self.hand_center:
-                        cv2.circle(result, self.hand_center, self.protection_radius, (0,255,0), 2)
-                    
-                    self.mask_history.append(protection_mask)
-                    
-                    # Add hand features visualization only within protected region
+                    # Add feature visualization on white background
                     cv2.drawContours(result, [smoothed_contour], -1, (0,0,255), 2)  # Red contour
                     
                     # Get hull and defects for visualization
@@ -250,16 +235,12 @@ class AdvancedHandSegmenter:
                                 start = tuple(smoothed_contour[s][0])
                                 end = tuple(smoothed_contour[e][0])
                                 far = tuple(smoothed_contour[f][0])
-                                # Only draw features within protected region
-                                if protection_mask[start[1], start[0]] > 0:
-                                    cv2.circle(result, start, 5, (255,0,0), -1)  # Blue fingertips
-                                if protection_mask[end[1], end[0]] > 0:
-                                    cv2.circle(result, end, 5, (255,0,0), -1)
-                                if protection_mask[far[1], far[0]] > 0:
-                                    cv2.circle(result, far, 5, (255,255,0), -1)  # Cyan valleys
+                                cv2.circle(result, start, 5, (255,0,0), -1)  # Blue fingertips
+                                cv2.circle(result, end, 5, (255,0,0), -1)
+                                cv2.circle(result, far, 5, (255,255,0), -1)  # Cyan valleys
                     
-                    combined_mask = cv2.bitwise_and(combined_mask, protection_mask)
-                    return combined_mask, combined_mask
+                    cv2.imshow("Hand Features", result)
+                    return result, hand_mask
                     
             return frame, combined_mask
         

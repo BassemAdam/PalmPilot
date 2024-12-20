@@ -57,5 +57,5 @@ if __name__ == "__main__":
     # Ensure that the model and scaler are trained first
     # You can call main() function here if not already done
     # main()  # Uncomment if model needs to be trained
-    a = cv2.imread("inverted_binary_mask.png", cv2.IMREAD_GRAYSCALE)
+    a = cv2.imread("hand_binary_mask.jpg", cv2.IMREAD_GRAYSCALE)
     test_single_image(a)  # Provide a test image path

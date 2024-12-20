@@ -210,6 +210,29 @@ class AdvancedHandSegmenter:
 
 
 
+def crop_to_white_region(frame, mask):
+    # Find contours in binary mask
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Find largest contour (likely the hand)
+    if len(contours) > 0:
+        largest_contour = max(contours, key=cv2.contourArea)
+        x, y, w, h = cv2.boundingRect(largest_contour)
+        
+        # Add padding around region
+        padding = 20
+        x = max(0, x - padding)
+        y = max(0, y - padding)
+        w = min(frame.shape[1] - x, w + 2*padding)
+        h = min(frame.shape[0] - y, h + 2*padding)
+        
+        # Crop original frame
+        cropped = frame[y:y+h, x:x+w]
+        return cropped
+    return frame
+
+
+
 def main():
     # Video file path
     video_path = r"C:\Users\basim\Desktop\Test1.mp4"
@@ -243,6 +266,10 @@ def main():
         
         frame = cv2.flip(frame, 1)
         result, mask = segmenter.segment_hand(frame)
+        
+   
+    
+    
         test_single_image(mask)
         cv2.imshow("Original", frame)
         cv2.imshow("Segmented Hand", result)

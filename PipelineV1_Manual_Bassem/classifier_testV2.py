@@ -10,7 +10,7 @@ scaler = joblib.load("gesture_classifier_scaler.pkl")
 
 class GestureClassifierWithHOG:
     def __init__(self):
-        self.class_names = ['A', 'B', 'C', 'D']  # Replace with actual class names
+        self.class_names = ['fist', 'closed fingers ', 'palm', 'peace']  # Replace with actual class names
 
     def extract_hog_features(self, image):
         # Resize image to a fixed size (e.g., 64x64)

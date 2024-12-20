@@ -4,7 +4,7 @@ import time
 from collections import deque
 
 class AdvancedHandSegmenter:
-    def __init__(self, adaptive_thresholds=True, history_size=5009, bg_history=3000, var_threshold=5, detect_shadows=False):
+    def __init__(self, adaptive_thresholds=True, history_size=5009, bg_history=3000, var_threshold=100, detect_shadows=False):
         self.adaptive_thresholds = adaptive_thresholds
         self.prev_frame = None
         self.contour_history = deque(maxlen=history_size)
@@ -234,7 +234,7 @@ class AdvancedHandSegmenter:
             return frame, np.zeros_like(frame[:,:,0])
 def main():
     # Video file path
-    video_path = r"C:\Users\basim\Desktop\Test1.mp4"
+    video_path = r"C:\Users\basim\Desktop\Test2.mp4"
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():

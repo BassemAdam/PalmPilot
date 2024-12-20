@@ -106,22 +106,40 @@ class AdvancedHandSegmenter:
             print(f"Error in hand segmentation: {str(e)}")
             return frame, np.zeros_like(frame[:,:,0])
 
+
 def main():
-    cap = cv2.VideoCapture(0)
+    # Video file path
+    video_path = r"C:\Users\basim\Desktop\Test1.mp4"
+    
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error: Could not open video file {video_path}")
+        return
+        
     segmenter = AdvancedHandSegmenter()
+    
+    # Get video properties and optimize
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    frame_skip = 2  # Process every nth frame
+    frame_count = 0
     
     while True:
         ret, frame = cap.read()
         if not ret:
             break
             
-        # Mirror frame
-        frame = cv2.flip(frame, 1)
+        frame_count += 1
+        if frame_count % frame_skip != 0:
+            continue
+            
+        # Resize frame for faster processing
+        height = int(frame.shape[0] * 0.5)
+        width = int(frame.shape[1] * 0.5)
+        frame = cv2.resize(frame, (width, height))
         
-        # Process frame
+        frame = cv2.flip(frame, 1)
         result, mask = segmenter.segment_hand(frame)
         
-        # Display results
         cv2.imshow("Original", frame)
         cv2.imshow("Segmented Hand", result)
         cv2.imshow("Mask", mask)

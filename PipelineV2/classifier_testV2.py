@@ -12,19 +12,36 @@ executor = CommandExecutor()
 
 class GestureClassifierWithHOG:
     def __init__(self):
-        self.class_names = ['SCROLL_UP', 'SCROLL_DOWN','ZOOM_IN','ZOOM_OUT']  # Replace with actual class names
+        self.class_names = ['SCROLL_UP', 'SCROLL_DOWN','ZOOM_IN','ZOOM_OUT']  # close peace, fist,palm,open peace
 
     def extract_hog_features(self, image):
-        # Resize image to a fixed size (e.g., 64x64)
+        # Convert the input image to grayscale if it's not already
+        if len(image.shape) == 3:  # Check if the image has color channels
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # Resize the image to a fixed size (e.g., 64x64)
         image_resized = cv2.resize(image, (64, 64))
 
-        # Compute HOG features
-        fd, hog_image = hog(image_resized, pixels_per_cell=(32, 32), cells_per_block=(2, 2), visualize=True)
+        # Upload the resized image to the GPU
+        gpu_image = cv2.cuda_GpuMat()
+        gpu_image.upload(image_resized)
 
-        # Enhance the image visualization (optional)
-        hog_image_rescaled = exposure.rescale_intensity(hog_image, in_range=(0, 10))
+        # Initialize CUDA HOG descriptor
+        hog = cv2.cuda_HOGDescriptor()
+        hog.setWinSize((64, 64))  # Window size should match the resized image dimensions
+        hog.setBlockSize((32, 32))  # Block size
+        hog.setBlockStride((16, 16))  # Block stride
+        hog.setCellSize((16, 16))  # Cell size
+        hog.setNumBins(9)  # Number of orientation bins
 
-        return fd  # Return the HOG feature descriptor
+        # Compute HOG features on the GPU
+        hog_features = hog.compute(gpu_image)
+
+        # Convert the HOG features to a NumPy array
+        hog_features = hog_features.reshape(-1)
+
+        return hog_features  # Return the HOG feature descriptor
+
     
     def predict(self, image):
         # Extract features from the image

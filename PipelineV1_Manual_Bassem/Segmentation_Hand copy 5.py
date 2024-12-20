@@ -6,7 +6,7 @@ from classifier_testV2 import test_single_image
 
 class AdvancedHandSegmenter:
     
-    def __init__(self, adaptive_thresholds=True, history_size=5009, bg_history=3000, var_threshold=3, detect_shadows=False):
+    def __init__(self, adaptive_thresholds=True, history_size=3000, bg_history=3000, var_threshold=10, detect_shadows=False):
         self.adaptive_thresholds = adaptive_thresholds
         self.prev_frame = None
         self.contour_history = deque(maxlen=history_size)
@@ -127,6 +127,87 @@ class AdvancedHandSegmenter:
         except:
             return contour
 
+    
+    def process_segments(self,image):
+        # Convert the image to HSV and YCrCb color spaces
+        blurred = cv2.GaussianBlur(image, (5, 5), 0)
+        hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+        ycrcb = cv2.cvtColor(blurred, cv2.COLOR_BGR2YCrCb)
+        
+        # Optimized thresholds for skin detection
+        lower_hsv = np.array([0, 30, 60], dtype=np.uint8)
+        upper_hsv = np.array([20, 150, 255], dtype=np.uint8)
+        lower_ycrcb = np.array([0, 135, 85], dtype=np.uint8)
+        upper_ycrcb = np.array([255, 180, 135], dtype=np.uint8)
+        
+        mask_hsv = cv2.inRange(hsv, lower_hsv, upper_hsv)
+        mask_ycrcb = cv2.inRange(ycrcb, lower_ycrcb, upper_ycrcb)
+        
+        # Combine masks with weights
+        combined_mask = cv2.addWeighted(mask_hsv, 0.5, mask_ycrcb, 0.5, 0)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        skin_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
+        skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_CLOSE, kernel)
+        
+        # Find contours in the mask
+        contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 3000]
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)
+
+        segmented_image = image.copy()
+
+        if len(contours) >= 2:
+            largest = contours[0]
+            second_largest = contours[1]
+        elif len(contours) == 1:
+            x, y, w, h = cv2.boundingRect(contours[0])
+            top_half = contours[0][contours[0][:, 0, 1] < y + h // 2]
+            bottom_half = contours[0][contours[0][:, 0, 1] >= y + h // 2]
+            if top_half.shape[0] > 0 and bottom_half.shape[0] > 0:
+                largest = top_half
+                second_largest = bottom_half
+            else:
+                return image, None, None, None
+        else:
+            return image, None, None, None
+
+        # Debugging: Print contour shapes
+        #print(f"Largest Contour: {largest.shape}")
+        #print(f"Second Largest Contour: {second_largest.shape}")
+
+        # Draw red and blue regions on the segmented image
+        if len(largest) > 0:
+            cv2.drawContours(segmented_image, [largest], -1, (255, 0, 0), -1)  # Blue for the largest
+        if len(second_largest) > 0:
+            cv2.drawContours(segmented_image, [second_largest], -1, (0, 0, 255), -1)  # Red for the second largest
+
+        def resize_with_aspect_ratio(image, target_size=(300, 300), pad_color=0):
+            h, w = image.shape[:2]
+            target_w, target_h = target_size
+            scale = min(target_w / w, target_h / h)
+            new_w, new_h = int(w * scale), int(h * scale)
+            resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            canvas = np.full((target_h, target_w), pad_color, dtype=np.uint8)
+            x_offset = (target_w - new_w) // 2
+            y_offset = (target_h - new_h) // 2
+            canvas[y_offset:y_offset + new_h, x_offset:x_offset + new_w] = resized_image
+            return canvas
+
+        def create_segment(contour, target_size=(300, 300)):
+            if contour is None or len(contour) == 0:
+                return None
+            mask = np.zeros_like(image[:, :, 0])
+            cv2.drawContours(mask, [contour], -1, 255, -1)
+            x, y, w, h = cv2.boundingRect(contour)
+            cropped = mask[y:y + h, x:x + w]
+            return resize_with_aspect_ratio(cropped, target_size)
+
+        blue_segment = create_segment(largest)
+        red_segment = create_segment(second_largest)
+
+        return image, segmented_image, blue_segment, red_segment
+
+
     def segment_hand(self, frame):
         try:
             enhanced_frame = frame.copy()
@@ -147,11 +228,12 @@ class AdvancedHandSegmenter:
             
             _, motion_mask = cv2.threshold(optical_flow_mask, 1.0, 255, cv2.THRESH_BINARY)
             motion_mask = motion_mask.astype(np.uint8)
-            
+                      # Replace line with noise removal pipeline
+            kernel_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
             combined_mask = cv2.bitwise_and(skin_mask, combined_mask_fg_mask)
-
-          
-
+            
+         
+            
             # Add edge detection
             edges = cv2.Canny(frame, 200, 250)
             combined_mask = cv2.bitwise_or(combined_mask, edges)
@@ -208,28 +290,6 @@ class AdvancedHandSegmenter:
             print(f"Error in hand segmentation: {str(e)}")
             return frame, np.zeros_like(frame[:,:,0])
 
-
-
-def crop_to_white_region(frame, mask):
-    # Find contours in binary mask
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Find largest contour (likely the hand)
-    if len(contours) > 0:
-        largest_contour = max(contours, key=cv2.contourArea)
-        x, y, w, h = cv2.boundingRect(largest_contour)
-        
-        # Add padding around region
-        padding = 20
-        x = max(0, x - padding)
-        y = max(0, y - padding)
-        w = min(frame.shape[1] - x, w + 2*padding)
-        h = min(frame.shape[0] - y, h + 2*padding)
-        
-        # Crop original frame
-        cropped = frame[y:y+h, x:x+w]
-        return cropped
-    return frame
 
 
 

@@ -2,9 +2,9 @@ import cv2
 import numpy as np
 import time
 from collections import deque
-
+import collections
 class AdvancedHandSegmenter:
-    def __init__(self, adaptive_thresholds=True, history_size=5009, bg_history=3000, var_threshold=100, detect_shadows=False):
+    def __init__(self, adaptive_thresholds=True, history_size=300, bg_history=300, var_threshold=5, detect_shadows=False):
         self.adaptive_thresholds = adaptive_thresholds
         self.prev_frame = None
         self.contour_history = deque(maxlen=history_size)
@@ -13,34 +13,46 @@ class AdvancedHandSegmenter:
         self.n_colors = 8  # Number of colors for quantization
         self.hand_center = None
         self.protection_radius = 100  # Radius of protected region
-        self.mask_history = deque(maxlen=10)
-    
+        self.mask_history = deque(maxlen=100)
+        self.prev_mag = None
+        self.motion_history = None
+        self.MHI_DURATION = 0.5
+        self.MAX_TIME_DELTA = 0.25
+        self.MIN_TIME_DELTA = 0.05
     def cartoonize_frame(self, frame, mask):
-        # K-means clustering with single skin color
-        data = frame[mask > 0].reshape((-1,3))
+        # Edge-aware smoothing
+        smooth = cv2.bilateralFilter(frame, d=9, sigmaColor=75, sigmaSpace=75)
+        
+        # Edge detection
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.medianBlur(gray, 5)
+        edges = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, 
+                                    cv2.THRESH_BINARY, 9, 2)
+        
+        # Color quantization
+        data = smooth[mask > 0].reshape((-1,3))
         if len(data) == 0:
             return np.zeros_like(frame)
         
         data = np.float32(data)
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-        _, labels, centers = cv2.kmeans(data, 1, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 20, 0.001)
+        K = 8  # Number of colors
+        _, labels, centers = cv2.kmeans(data, K, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
         
-        # Get dominant skin color
-        skin_color = np.uint8(centers[0])
-        
-        # Create result frame
+        # Create cartoon effect
         result = np.zeros_like(frame)
-        result[mask > 0] = skin_color
+        labels = labels.flatten()
+        for i, color in enumerate(centers):
+            result[mask > 0][labels == i] = color
         
-        # Verify skin color in HSV space
-        hsv_result = cv2.cvtColor(result, cv2.COLOR_BGR2HSV)
-        lower_skin = np.array([0, 20, 70], dtype=np.uint8)
-        upper_skin = np.array([20, 255, 255], dtype=np.uint8)
-        skin_mask = cv2.inRange(hsv_result, lower_skin, upper_skin)
+        # Combine with edges
+        edges = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+        result = cv2.bitwise_and(result, 255 - edges)
         
-        # Apply final mask
-        result[skin_mask == 0] = 0
+        # Apply mask
+        result[mask == 0] = 0
         
+        cv2.imshow('Cartoon Effect', result)
         return result
     
     def create_enhanced_skin_mask(self, frame):
@@ -72,9 +84,8 @@ class AdvancedHandSegmenter:
         mask_hsv = cv2.inRange(hsv, lower_hsv, upper_hsv)
         mask_ycrcb = cv2.inRange(ycrcb, lower_ycrcb, upper_ycrcb)
         
-        combined_mask = cv2.addWeighted(mask_hsv, 0.8, mask_ycrcb, 0.5, 0)
-        # fg = self.bg_subtractor.apply(frame)
-        # combined_mask = cv2.bitwise_and(combined_mask, fg)
+        combined_mask = cv2.addWeighted(mask_hsv, 0.5, mask_ycrcb, 0.5, 0)
+     
         return combined_mask
 
     def is_hand_contour(self, contour):
@@ -103,16 +114,79 @@ class AdvancedHandSegmenter:
 
     
     def calculate_optical_flow(self, frame):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if self.prev_gray is None:
-            self.prev_gray = gray
-            return np.zeros_like(gray)
+        # Face detection to exclude face region
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray_frame, 1.3, 5)
         
-        flow = cv2.calcOpticalFlowFarneback(self.prev_gray, gray, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        # Create face exclusion mask
+        face_mask = np.ones_like(gray_frame)
+        for (x, y, w, h) in faces:
+            face_mask[y:y+h, x:x+w] = 0
+        
+        # Create skin mask with face excluded
+        skin_mask = self.create_enhanced_skin_mask(frame)
+        skin_mask = cv2.bitwise_and(skin_mask, skin_mask, mask=face_mask)
+        
+        # Preprocessing with skin mask
+        blurred = cv2.GaussianBlur(frame, (7, 7), 1.5)
+        gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
+        masked_gray = cv2.bitwise_and(gray, gray, mask=skin_mask)
+        
+        # Initialize tracking
+        if self.prev_gray is None:
+            self.prev_gray = masked_gray.copy()
+            self.prev_mag = np.zeros_like(masked_gray, dtype=np.float32)
+            self.motion_history = np.zeros_like(masked_gray, dtype=np.float32)
+            self.hand_roi = None
+            return np.zeros_like(masked_gray)
+    
+        # Calculate optical flow only in ROI if available
+        if self.hand_roi is not None:
+            x, y, w, h = self.hand_roi
+            roi_mask = np.zeros_like(masked_gray)
+            roi_mask[y:y+h, x:x+w] = 1
+            masked_gray = cv2.bitwise_and(masked_gray, masked_gray, mask=roi_mask)
+    
+        # Enhanced optical flow
+        flow = cv2.calcOpticalFlowFarneback(
+            self.prev_gray,
+            masked_gray,
+            None,
+            pyr_scale=0.5,
+            levels=6,
+            winsize=21,
+            iterations=5,
+            poly_n=7,
+            poly_sigma=1.5,
+            flags=0
+        )
+    
+        # Motion analysis
         mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-        self.prev_gray = gray
-        return mag
-
+        
+        # Adaptive thresholding for hand movement
+        mag_threshold = np.percentile(mag, 85)  # More strict threshold
+        hand_motion_mask = (mag > mag_threshold).astype(np.uint8) * 255
+        
+        # Find the largest connected component (assumed to be the hand)
+        contours, _ = cv2.findContours(hand_motion_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            # Filter by minimum area to avoid small movements
+            if cv2.contourArea(largest_contour) > 1000:
+                hand_motion_mask = np.zeros_like(hand_motion_mask)
+                cv2.drawContours(hand_motion_mask, [largest_contour], -1, 255, -1)
+                # Update ROI
+                self.hand_roi = cv2.boundingRect(largest_contour)
+        
+        # Update states
+        self.prev_gray = masked_gray.copy()
+        self.prev_mag = mag.astype(np.float32)
+    
+        return cv2.bitwise_and(hand_motion_mask, hand_motion_mask, mask=skin_mask)
+    
+    
     def smooth_contours(self, contour):
         try:
             perimeter = cv2.arcLength(contour, True)
@@ -126,6 +200,7 @@ class AdvancedHandSegmenter:
             return approx_contour
         except:
             return contour
+    
     def analyze_hand_features(self, contour, frame):
         # Get convex hull
         hull = cv2.convexHull(contour)
@@ -167,15 +242,15 @@ class AdvancedHandSegmenter:
             skin_mask = self.create_enhanced_skin_mask(enhanced_frame)
             optical_flow_mask = self.calculate_optical_flow(enhanced_frame)
             
-            fg_mask = self.bg_subtractor.apply(frame)
-            combined_mask_fg_mask = cv2.bitwise_and(skin_mask, fg_mask)
-        
+           
             _, motion_mask = cv2.threshold(optical_flow_mask, 1.0, 255, cv2.THRESH_BINARY)
             motion_mask = motion_mask.astype(np.uint8)
             
             combined_mask = cv2.bitwise_and(skin_mask, motion_mask)
 
-          
+            # fg_mask = self.bg_subtractor.apply(frame)
+            # combined_mask_fg_mask = cv2.bitwise_and(skin_mask, fg_mask)
+        
 
             # Add edge detection
             edges = cv2.Canny(frame, 100, 200)
@@ -232,11 +307,14 @@ class AdvancedHandSegmenter:
         except Exception as e:
             print(f"Error in hand segmentation: {str(e)}")
             return frame, np.zeros_like(frame[:,:,0])
+
+
+
 def main():
     # Video file path
     video_path = r"C:\Users\basim\Desktop\Test2.mp4"
     
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print(f"Error: Could not open video file {video_path}")
         return

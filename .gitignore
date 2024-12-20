@@ -166,3 +166,4 @@ Classifier/binary_masks.npy
 Classifier/labels.npy
 PipelineV1_Manual_Bassem/gesture_classifier_model.pkl
 PipelineV1_Manual_Bassem/gesture_classifier_scaler.pkl
+PipelineV2 Hazem/test

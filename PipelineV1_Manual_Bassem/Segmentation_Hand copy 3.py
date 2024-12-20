@@ -4,7 +4,7 @@ import time
 from collections import deque
 
 class AdvancedHandSegmenter:
-    def __init__(self, adaptive_thresholds=True, history_size=5009, bg_history=3000, var_threshold=5, detect_shadows=False):
+    def __init__(self, adaptive_thresholds=True, history_size=5009, bg_history=3000, var_threshold=3, detect_shadows=False):
         self.adaptive_thresholds = adaptive_thresholds
         self.prev_frame = None
         self.contour_history = deque(maxlen=history_size)
@@ -85,8 +85,25 @@ class AdvancedHandSegmenter:
         mask_ycrcb = cv2.inRange(ycrcb, lower_ycrcb, upper_ycrcb)
         
         combined_mask = cv2.addWeighted(mask_hsv, 0.8, mask_ycrcb, 0.5, 0)
-        # fg = self.bg_subtractor.apply(frame)
-        # combined_mask = cv2.bitwise_and(combined_mask, fg)
+        
+        fg = self.bg_subtractor.apply(frame)
+        kernel = np.ones((7,3), np.uint8)
+        
+        # Show original foreground
+        cv2.imshow('Original Foreground', fg)
+        
+        # Dilate and show
+        fg = cv2.dilate(fg, kernel, iterations=300)
+        
+        # Binarize the mask
+        _, fg = cv2.threshold(fg, 127, 255, cv2.THRESH_BINARY)
+        cv2.imshow('Dilated & Binarized Foreground', fg)
+        
+        # Show combined result
+        combined_mask = cv2.bitwise_and(combined_mask, fg)
+        _, combined_mask = cv2.threshold(combined_mask, 100, 255, cv2.THRESH_BINARY)
+        cv2.imshow('Combined Binary Mask', combined_mask)
+
         return combined_mask
 
     def is_hand_contour(self, contour):
@@ -249,7 +266,7 @@ class AdvancedHandSegmenter:
             return frame, np.zeros_like(frame[:,:,0])
 def main():
     # Video file path
-    video_path = r"C:\Users\basim\Desktop\Test1.mp4"
+    video_path = r"C:\Users\basim\Desktop\Test2.mp4"
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():

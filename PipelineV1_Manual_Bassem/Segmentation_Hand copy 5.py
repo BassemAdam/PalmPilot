@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import time
 from collections import deque
+from classifier_testV2 import test_single_image
 
 class AdvancedHandSegmenter:
     
@@ -209,47 +210,17 @@ class AdvancedHandSegmenter:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def main():
     # Video file path
     video_path = r"C:\Users\basim\Desktop\Test1.mp4"
     
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print(f"Error: Could not open video file {video_path}")
         return
         
     segmenter = AdvancedHandSegmenter()
+   
     
     # Get video properties and optimize
     fps = int(cap.get(cv2.CAP_PROP_FPS))
@@ -272,7 +243,7 @@ def main():
         
         frame = cv2.flip(frame, 1)
         result, mask = segmenter.segment_hand(frame)
-        
+        test_single_image(mask)
         cv2.imshow("Original", frame)
         cv2.imshow("Segmented Hand", result)
         cv2.imshow("Mask", mask)

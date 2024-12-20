@@ -2,17 +2,19 @@ import os
 import cv2
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score
 import joblib
-from sklearn.preprocessing import StandardScaler  # Import StandardScaler
+from sklearn.preprocessing import StandardScaler
+from skimage.feature import hog
+from skimage import exposure
 
-class GestureClassifierWithHull:
+class GestureClassifierWithHOG:
     def __init__(self, dataset_path=None):
         self.dataset_path = dataset_path
         self.class_names = []
         self.model = None
-        self.scaler = StandardScaler()  # Initialize the scaler
+        self.scaler = StandardScaler()
 
     def load_class_names(self, dataset_path):
         if dataset_path:
@@ -21,40 +23,17 @@ class GestureClassifierWithHull:
                 if os.path.isdir(os.path.join(self.dataset_path, folder_name)):
                     self.class_names.append(folder_name)
 
-    def extract_hull_features(self, image):
-        blurred = cv2.GaussianBlur(image, (5, 5), 0)
-        _, binary = cv2.threshold(blurred, 50, 255, cv2.THRESH_BINARY)
+    def extract_hog_features(self, image):
+        # Resize image to a fixed size (e.g., 64x64)
+        image_resized = cv2.resize(image, (64, 64))
 
-        # Find contours
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return np.zeros(8)  # Return empty features if no contours
+        # Compute HOG features
+        fd, hog_image = hog(image_resized, pixels_per_cell=(32, 32), cells_per_block=(2, 2), visualize=True)
 
-        max_contour = max(contours, key=cv2.contourArea)
-        hull = cv2.convexHull(max_contour)
+        # Enhance the image visualization (optional)
+        hog_image_rescaled = exposure.rescale_intensity(hog_image, in_range=(0, 10))
 
-        # Extract geometric features
-        area = cv2.contourArea(max_contour)
-        hull_area = cv2.contourArea(hull)
-        perimeter = cv2.arcLength(max_contour, True)
-        solidity = float(area) / hull_area if hull_area > 0 else 0
-        x, y, w, h = cv2.boundingRect(max_contour)
-        aspect_ratio = float(w) / h if h > 0 else 0
-
-        # Extract Hu Moments
-        moments = cv2.moments(max_contour)
-        hu_moments = cv2.HuMoments(moments).flatten()
-
-        # Extract Convex Hull Defects (useful for shapes like a "peace" sign)
-        hull_defects = cv2.convexityDefects(max_contour, cv2.convexHull(max_contour, returnPoints=False))
-        defects_count = 0
-        if hull_defects is not None:
-            defects_count = len(hull_defects)
-
-        # Combine all features into one array
-        features = np.hstack([area, hull_area, perimeter, solidity, aspect_ratio, hu_moments, defects_count])
-
-        return features
+        return fd  # Return the HOG feature descriptor
 
     def load_dataset(self):
         data = []
@@ -77,8 +56,8 @@ class GestureClassifierWithHull:
                     if image is None:
                         continue
 
-                    # Extract convex hull features
-                    features = self.extract_hull_features(image)
+                    # Extract HOG features
+                    features = self.extract_hog_features(image)
                     data.append(features)
                     labels.append(class_label)
                 except Exception as e:
@@ -89,7 +68,11 @@ class GestureClassifierWithHull:
         labels = np.array(labels)
 
         # Fit the scaler on the training data
-        data = self.scaler.fit_transform(data)  # Fit and transform the training data
+        data = self.scaler.fit_transform(data)
+
+        # Ensure data is 2D (n_samples, n_features)
+        if data.ndim == 1:  # If there is a single feature, reshape to 2D
+            data = data.reshape(-1, 1)
 
         return data, labels
 
@@ -97,8 +80,14 @@ class GestureClassifierWithHull:
         # Split into training and testing sets
         X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.2, random_state=42)
 
-        # Train the SVM model
-        self.model = SVC(kernel='rbf', probability=True, C=1.0, gamma='scale')
+        # Train the Random Forest model
+        self.model = RandomForestClassifier(n_estimators=1000, random_state=42, n_jobs=5)
+
+        # Ensure that both training and testing data are 2D
+        if X_train.ndim == 1:  # If training data is 1D, reshape to 2D
+            X_train = X_train.reshape(-1, 1)
+        if X_test.ndim == 1:  # If testing data is 1D, reshape to 2D
+            X_test = X_test.reshape(-1, 1)
 
         self.model.fit(X_train, y_train)
 
@@ -115,10 +104,10 @@ class GestureClassifierWithHull:
 
     def predict(self, image):
         # Extract features from the image
-        features = self.extract_hull_features(image).reshape(1, -1)
+        features = self.extract_hog_features(image).reshape(1, -1)  # Ensure the input is 2D
 
         # Normalize the features using the fitted scaler
-        features = self.scaler.transform(features)
+        features = self.scaler.transform(features)  # Apply the same transformation as during training
 
         # Predict the gesture
         prediction = self.model.predict(features)
@@ -126,10 +115,29 @@ class GestureClassifierWithHull:
 
         return self.class_names[prediction[0]], probability[0]
 
+# Test function
+def test_single_image(image_path):
+    # Read the test image
+    image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+
+    # Check if image is loaded successfully
+    if image is None:
+        print(f"Error: Unable to load image at {image_path}")
+        return
+
+    classifier = GestureClassifierWithHOG()
+
+    # Predict the gesture and its probability
+    gesture, probability = classifier.predict(image)
+
+    # Print the result
+    print(f"Predicted Gesture: {gesture}")
+    print(f"Class Probabilities: {probability}")
+
 # Main function for dataset loading and training
 def main():
-    dataset_path = "../Classifier/Gesture Image Pre-Processed Data"  # Use actual dataset path
-    classifier = GestureClassifierWithHull(dataset_path)
+    dataset_path = "../Classifier/Gesture Image Pre-Processed Data"  # Adjust the path to your dataset
+    classifier = GestureClassifierWithHOG(dataset_path)
 
     print("Loading dataset...")
     data, labels = classifier.load_dataset()

@@ -181,7 +181,7 @@ def main():
     # Video file path
     video_path = r"C:\Users\basim\Desktop\Test1.mp4"
     
-    cap = cv2.VideoCapture(video_path)
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print(f"Error: Could not open video file {video_path}")
         return

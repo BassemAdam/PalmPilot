@@ -74,14 +74,14 @@ class EnhancedHandSegmenter:
 
 def main():
     # Use pathlib for cross-platform path handling
-    video_path = Path(input("Enter video path: ").strip('"'))
-    if not video_path.exists():
-        logging.error(f"Video file not found: {video_path}")
-        return
+    # video_path = Path(input("Enter video path: ").strip('"'))
+    # if not video_path.exists():
+    #     logging.error(f"Video file not found: {video_path}")
+    #     return
 
-    cap = cv2.VideoCapture(str(video_path))
+    cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        logging.error(f"Failed to open video: {video_path}")
+        # logging.error(f"Failed to open video: {video_path}")
         return
 
     # Setup video writer
@@ -89,13 +89,13 @@ def main():
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    output_path = video_path.with_name(f"{video_path.stem}_processed.mp4")
-    out = cv2.VideoWriter(
-        str(output_path),
-        cv2.VideoWriter_fourcc(*'mp4v'),
-        30,
-        (frame_width, frame_height)
-    )
+    # output_path = video_path.with_name(f"{video_path.stem}_processed.mp4")
+    # out = cv2.VideoWriter(
+    #     str(output_path),
+    #     cv2.VideoWriter_fourcc(*'mp4v'),
+    #     30,
+    #     (frame_width, frame_height)
+    # )
 
     segmenter = EnhancedHandSegmenter()
     
@@ -107,7 +107,7 @@ def main():
                 break
 
             result, mask = segmenter.segment_hand(frame)
-            out.write(result)
+            # out.write(result)
             
             # Display results
             cv2.imshow("Processed", result)
@@ -117,7 +117,7 @@ def main():
             pbar.update(1)
 
     cap.release()
-    out.release()
+    # out.release()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":

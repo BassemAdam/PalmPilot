@@ -10,7 +10,7 @@ scaler = joblib.load("gesture_classifier_scaler.pkl")
 
 class GestureClassifierWithHOG:
     def __init__(self):
-        self.class_names = ['fist', 'closed fingers ', 'palm', 'peace']  # Replace with actual class names
+        self.class_names = ['palm', 'fist ', 'peace', 'closed fingers', 'face']  # Replace with actual class names
 
     def extract_hog_features(self, image):
         # Resize image to a fixed size (e.g., 64x64)
@@ -113,6 +113,9 @@ def process_segments(image):
         target_w, target_h = target_size
         scale = min(target_w / w, target_h / h)
         new_w, new_h = int(w * scale), int(h * scale)
+        if w == 0 or h == 0:
+            print("Invalid bounding box dimensions:", w, h)
+            return None
         resized_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
         canvas = np.full((target_h, target_w), pad_color, dtype=np.uint8)
         x_offset = (target_w - new_w) // 2
@@ -158,7 +161,7 @@ if __name__ == "__main__":
             #cv2.imshow("Blue Part", blue_part)
             #test_single_image(blue_part)
             if frames % 10 == 0:
-                test_single_image(red_part)
+                test_single_image(blue_part)
                 
         if red_part is not None:
             #cv2.imshow("Red Part", red_part)

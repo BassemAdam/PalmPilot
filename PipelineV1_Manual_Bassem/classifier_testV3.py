@@ -10,7 +10,7 @@ from skimage import exposure
 
 class GestureClassifierWithSIFT:
     def __init__(self):
-        self.class_names = ['A', 'B', 'C', 'D']  # Replace with actual class names
+        self.class_names = ['A', 'B', 'C', 'D','E']  # Replace with actual class names
         self.class_names = []
         self.model = None
         self.sift = cv2.SIFT_create()
@@ -75,7 +75,8 @@ def test_single_image(image):
     print(f"Predicted Class: {predicted_class}")
     print("Probabilities:")
     for class_name, prob in zip(classifier.class_names, probabilities):
-        print(f"  {class_name}: {prob:.2f}")
+        if class_name != 'E':
+            print(f" {class_name}")
 
 
 
@@ -183,7 +184,7 @@ if __name__ == "__main__":
             #cv2.imshow("Blue Part", blue_part)
             #test_single_image(blue_part)
             if frames % 10 == 0:
-                test_single_image(red_part)
+                test_single_image(blue_part)
                 
         if red_part is not None:
             #cv2.imshow("Red Part", red_part)

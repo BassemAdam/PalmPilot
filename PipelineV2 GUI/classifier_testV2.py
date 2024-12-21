@@ -162,7 +162,7 @@ if __name__ == "__main__":
             #cv2.imshow("Blue Part", blue_part)
             #test_single_image(blue_part)
             if frames % 10 == 0:
-                test_single_image(red_part)
+                test_single_image(blue_part)
                 
         if red_part is not None:
             #cv2.imshow("Red Part", red_part)
